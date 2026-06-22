@@ -2,13 +2,17 @@ import socket
 import threading 
 import time 
  
+semaforoClientes = threading.Semaphore(3)
+compra = threading.Event
+
 # Variable global: Inventario de entradas 
-entradas_disponibles = 5 
+entradas_disponibles = 5
+lockEntradas = threading.Lock()
  
 # --- NUEVO REQUERIMIENTO A: Sistema de Actualización --- 
 # Bandera booleana para pausar el servidor.  
 en_actualizacion = False 
- 
+
 def simular_actualizacion(): 
     """Hilo independiente que frena el servidor a los 2 segundos""" 
     global en_actualizacion 
@@ -20,7 +24,7 @@ def simular_actualizacion():
     en_actualizacion = False 
  
 # --- NUEVO REQUERIMIENTO B: Envío de Emails --- 
-def enviar_email_confirmacion(direccion): 
+def enviar_email_confirmacion(direccion):
     """Simula el tiempo de conexión a un servidor SMTP externo""" 
     print(f" -> [Mail] Conectando al servidor para enviar ticket a {direccion}...") 
     # Retraso de red bloqueante 
@@ -30,29 +34,37 @@ def enviar_email_confirmacion(direccion):
 def manejar_cliente(conexion, direccion): 
     global entradas_disponibles 
     global en_actualizacion     
+    #Sumo un semáforo que limita el acceso máximo de los clientes a 3
     try: 
         while en_actualizacion: 
- 
+    
             pass  # espera a que termine la actualización 
-             
-        peticion = conexion.recv(1024).decode('utf-8')         
-        if peticion == "COMPRAR": 
-            if entradas_disponibles > 0: 
-                time.sleep(0.5)                  
-                entradas_disponibles -= 1 
-                respuesta = f"Compra exitosa. Quedan {entradas_disponibles} entradas." 
-                                 
-                enviar_email_confirmacion(direccion) 
-            else: 
-                respuesta = "Operación rechazada. Entradas agotadas." 
-                 
-        else: 
-            respuesta = "Petición no reconocida." 
-             
-        conexion.send(respuesta.encode('utf-8')) 
-         
+
+        with semaforoClientes:
+                  
+                peticion = conexion.recv(1024).decode('utf-8')         
+                
+                if peticion == "COMPRAR":
+                    
+                    if entradas_disponibles > 0:
+                        #Se bloquea el recurso en caso de haber entradas disponibles
+                        lockEntradas.acquire()   
+                        time.sleep(0.5)                  
+                        entradas_disponibles -= 1 
+                        respuesta = f"Compra exitosa. Quedan {entradas_disponibles} entradas."  
+                        lockEntradas.release()
+                        enviar_email_confirmacion(direccion) 
+                                        
+                    else: 
+                        respuesta = "Operación rechazada. Entradas agotadas." 
+                        
+                else: 
+                    respuesta = "Petición no reconocida." 
+                
+                conexion.send(respuesta.encode('utf-8')) 
+
     finally: 
-        conexion.close() 
+            conexion.close()
  
 def iniciar_servidor(): 
     servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
@@ -66,9 +78,9 @@ def iniciar_servidor():
  
     while True: 
         conexion, direccion = servidor.accept() 
-        hilo_cliente = threading.Thread(target=manejar_cliente, args=(conexion, 
-direccion)) 
-        hilo_cliente.start() 
+        hilo_cliente = threading.Thread(target=manejar_cliente, args=(conexion, direccion)) 
+        hilo_cliente.start()
+
  
 if __name__ == "__main__": 
  
