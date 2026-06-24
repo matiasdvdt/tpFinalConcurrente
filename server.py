@@ -46,17 +46,17 @@ def manejar_cliente(conexion, direccion):
                 
                 if peticion == "COMPRAR":
                     
-                    if entradas_disponibles > 0:
-                        #Se bloquea el recurso en caso de haber entradas disponibles
-                        lockEntradas.acquire()   
-                        time.sleep(0.5)                  
-                        entradas_disponibles -= 1 
-                        respuesta = f"Compra exitosa. Quedan {entradas_disponibles} entradas."  
-                        lockEntradas.release()
-                        enviar_email_confirmacion(direccion) 
-                                        
-                    else: 
-                        respuesta = "Operación rechazada. Entradas agotadas." 
+                    with lockEntradas:
+                        if entradas_disponibles > 0:
+                            #Se bloquea el recurso en caso de haber entradas disponibles
+                            time.sleep(0.5)                  
+                            entradas_disponibles -= 1 
+                            respuesta = f"Compra exitosa. Quedan {entradas_disponibles} entradas."  
+                            hilo_email = threading.Thread(target=enviar_email_confirmacion, args=(direccion,))
+                            hilo_email.start()
+                                            
+                        else: 
+                            respuesta = "Operación rechazada. Entradas agotadas." 
                         
                 else: 
                     respuesta = "Petición no reconocida." 
