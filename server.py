@@ -3,7 +3,6 @@ import threading
 import time 
  
 semaforoClientes = threading.Semaphore(3)
-compra = threading.Event
 
 # Variable global: Inventario de entradas 
 entradas_disponibles = 5
@@ -11,17 +10,17 @@ lockEntradas = threading.Lock()
  
 # --- NUEVO REQUERIMIENTO A: Sistema de Actualización --- 
 # Bandera booleana para pausar el servidor.  
-en_actualizacion = False 
+en_actualizacion = threading.Event()
+en_actualizacion.set()
 
 def simular_actualizacion(): 
     """Hilo independiente que frena el servidor a los 2 segundos""" 
-    global en_actualizacion 
     time.sleep(2) 
     print("\n[ALERTA] Iniciando actualización del sistema. Pausando ventas...") 
-    en_actualizacion = True 
+    en_actualizacion.clear()
     time.sleep(3) # La actualización dura 3 segundos 
     print("[ALERTA] Actualización terminada. Reanudando ventas...\n") 
-    en_actualizacion = False 
+    en_actualizacion.set()
  
 # --- NUEVO REQUERIMIENTO B: Envío de Emails --- 
 def enviar_email_confirmacion(direccion):
@@ -36,9 +35,8 @@ def manejar_cliente(conexion, direccion):
     global en_actualizacion     
     #Sumo un semáforo que limita el acceso máximo de los clientes a 3
     try: 
-        while en_actualizacion: 
-    
-            pass  # espera a que termine la actualización 
+        
+        en_actualizacion.wait()
 
         with semaforoClientes:
                   
